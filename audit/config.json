@@ -30,12 +30,12 @@
     "phash_similarity": 0.88
   },
   "vlm": {
-    "backend": "ollama",
-    "host": "http://127.0.0.1:11434",
-    "model": "qwen3-vl:2b-instruct",
+    "api": "openai",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "api_key": "ollama",
+    "model": "qwen3-vl:2b-instruct-ctx3072",
     "timeout": 300,
-    "num_predict": 1500,
-    "num_ctx": 3072,
+    "max_tokens": 1500,
     "temperature": 0.1,
     "image_max_side": 1024,
     "compensations": ["around_override", "behind_to_depth"]

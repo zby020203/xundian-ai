@@ -4,7 +4,7 @@
       -> 质量 / 拼接 / 摩尔纹（规则，永远可用）
       -> YOLO 检测瓶体（可选，缺权重则降级）
       -> 1:N 检索（可选，无索引则跳过）
-      -> VLM 语义判定（可选，Ollama 不通则降级）
+      -> VLM 语义判定（可选，OpenAI 兼容服务不通则降级）
       -> 证据融合 -> 结论 + 是否转人工
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ from .detect import Detector
 from .embed import Embedder
 from .logutil import get_logger
 from .retrieve import Index
-from .vlm import OllamaVLM
+from .vlm import VLMClient
 
 log = get_logger(__name__)
 
@@ -30,12 +30,12 @@ class Pipeline:
         self.use_vlm = use_vlm
         self.use_detector = use_detector
         self.detector = Detector(self.cfg.get("detector", {}), self.cfg.abspath("paths.model_root"))
-        self.vlm = OllamaVLM(self.cfg.get("vlm", {}))
+        self.vlm = VLMClient(self.cfg.get("vlm", {}))
         self.embedder = Embedder(self.cfg.get("embedder", {}))
         self.index = Index.load(self.cfg.abspath("paths.index_path"))
         log.info("初始化：VLM=%s%s | 检测=%s%s | 索引=%d 条%s",
                  "开" if use_vlm else "关",
-                 f"({self.cfg.get('vlm.model', '?')})" if use_vlm else "",
+                 f"({self.cfg.get('vlm.model', '?')} via {self.vlm.api})" if use_vlm else "",
                  "开" if use_detector else "关",
                  f"({self.cfg.get('detector.weights', '?')})" if use_detector else "",
                  self.index.size,
@@ -126,9 +126,9 @@ class Pipeline:
             if self.vlm.available():
                 vlm_out = self.vlm.judge(im)
             else:
-                vlm_out = {"status": "unavailable", "error": "Ollama 未响应"}
-                log.error("[vlm] Ollama 服务无响应（%s），本图转人工",
-                          self.cfg.get("vlm.host", "http://127.0.0.1:11434"))
+                vlm_out = {"status": "unavailable", "error": "VLM 服务未响应"}
+                log.error("[vlm] 服务无响应（%s api=%s），本图转人工",
+                          self.vlm.root, self.vlm.api)
             timings["vlm"] = round(time.time() - t, 3)
             if vlm_out.get("status") == "ok":
                 log.info("[vlm] %.2fs -> scene=%s depth=%s 空瓶=%s is_screen=%s conf=%s",
