@@ -20,6 +20,7 @@ class Embedder:
         self.backend = "none"
         self.model = None
         self._torch = None
+        self._dim = 0
         self.status = "not_loaded"
 
     # ------------------------------------------------------------ 加载
@@ -32,7 +33,10 @@ class Embedder:
         if want in ("auto", "torchvision"):
             if self._load_resnet():
                 self.backend, self.status = "resnet18", "ok"
-                log.info("[embed] 向量后端=resnet18（语义特征，512 维）")
+                # 注意维度不是 512：encode 取的是整个网络的前向输出（fc 之后），
+                # 也就是 ImageNet 1000 类 logits。真实维度以首次 encode 结果为准，
+                # 索引侧与查询侧都走同一条 encode，所以天然对齐。
+                log.info("[embed] 向量后端=resnet18（torchvision 全网络输出，非 512 维中间特征）")
                 return self.backend
 
         self.backend, self.status = "phash", "fallback"
@@ -73,12 +77,25 @@ class Embedder:
                 feats = self.model(x)
             v = feats[0].numpy().astype(np.float32)
             n = np.linalg.norm(v) + 1e-8
-            return v / n
+            v = v / n
+            self._dim = int(v.shape[0])
+            log.debug("[embed] resnet18 输出 %d 维，norm 已归一", self._dim)
+            return v
         # fallback：感知哈希 -> ±1 向量
         h = imageops.phash(im).astype(np.float32)
         v = (h * 2.0 - 1.0)
-        return v / (np.linalg.norm(v) + 1e-8)
+        v = v / (np.linalg.norm(v) + 1e-8)
+        self._dim = int(v.shape[0])
+        return v
 
     @property
     def dim(self) -> int:
-        return 512 if self.load() == "resnet18" else 64
+        """实际向量维度；未编码过时 resnet18 按 fc 输出估（1000），pHash 为 64。"""
+        if self._dim:
+            return self._dim
+        if self.backend != "resnet18":
+            return 64
+        try:
+            return int(self.model.fc.out_features)
+        except Exception:
+            return 0
