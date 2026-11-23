@@ -10,6 +10,10 @@ from typing import Dict, List
 
 import numpy as np
 
+from .logutil import get_logger
+
+log = get_logger(__name__)
+
 
 class Detector:
     def __init__(self, cfg: dict, model_root: str):
@@ -35,13 +39,16 @@ class Detector:
         cand = weight if os.path.isabs(weight) else os.path.join(self.model_root, weight)
         if not os.path.exists(cand):
             cand = weight  # 交给 ultralytics 自动下载
+        log.info("[detect] 加载权重：%s（本地未命中则交给 ultralytics 下载）", cand)
         try:
             self.model = YOLO(cand)
             self.names = getattr(self.model, "names", {}) or {}
             self.status = "ok"
+            log.info("[detect] 权重就绪，模型含 %d 个类别", len(self.names))
             return True
         except Exception as e:
             self.status, self.error = "unavailable", f"权重加载失败: {e}"
+            log.warning("[detect] 权重加载失败，排面结构相关规则与安全阀均不生效：%s", e)
             return False
 
     # ------------------------------------------------------------ 推理
@@ -63,13 +70,17 @@ class Detector:
 
         bottles: List[dict] = []
         target = set(self.cfg.get("bottle_class_names", ["bottle"]))
+        n_raw = 0
+        seen_names: Dict[str, int] = {}
         for r in res:
             boxes = getattr(r, "boxes", None)
             if boxes is None:
                 continue
             for b in boxes:
+                n_raw += 1
                 cls_id = int(b.cls.item())
                 name = str(self.names.get(cls_id, cls_id))
+                seen_names[name] = seen_names.get(name, 0) + 1
                 if name not in target:
                     continue
                 x1, y1, x2, y2 = [float(v) for v in b.xyxy[0].tolist()]
@@ -82,6 +93,15 @@ class Detector:
                     "h": round(y2 - y1, 1),
                     "conf": round(float(b.conf.item()), 3),
                 })
+
+        top_cls = sorted(seen_names.items(), key=lambda kv: -kv[1])[:8]
+        log.debug("[detect] 原始框 %d 个，类别分布：%s", n_raw, dict(top_cls))
+        if n_raw and not bottles:
+            # 静默失效指纹：检出非零但按类名过滤后为空，几乎总是权重类名与
+            # bottle_class_names 不一致（换微调权重时必验此处）。
+            log.warning("[detect] 检出 %d 框但按 %s 过滤后为 0，实际类名=%s，"
+                        "需同步 config.detector.bottle_class_names",
+                        n_raw, sorted(target), sorted(seen_names)[:10])
 
         bottles.sort(key=lambda d: (d["cy"], d["cx"]))
         return {

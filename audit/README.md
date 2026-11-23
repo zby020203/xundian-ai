@@ -39,6 +39,7 @@ audit/
 ├── requirements.txt
 ├── audit/               # 核心包
 │   ├── config.py
+│   ├── logutil.py       # 统一日志（实时阶段进度，只打日志不配 handler）
 │   ├── imageops.py      # 清晰度 / 拼接检测 / 摩尔纹 / 感知哈希
 │   ├── detect.py        # YOLO 检测（瓶体）
 │   ├── embed.py         # 特征向量（ResNet / 退化 pHash）
@@ -133,7 +134,39 @@ $py = "C:\Users\YQSL\miniconda3\envs\yolo\python.exe"
 
 # 7) 判定路径回归（不依赖 Ollama/YOLO，秒级，26 条用例：15 规则融合 + 11 归一化推导）
 & $py scripts\path_check.py
+
+# 8) 看实时过程日志（排查用）
+& $py scripts\run_single.py --image images\... --log-level debug
+& $py scripts\run_single.py --image images\... --quiet     # 只要结论
 ```
+
+## 实时日志（每到一个阶段边界就输出一行，不等全部跑完）
+
+```
+[+   0.0s] INFO    pipeline  初始化：VLM=开(qwen3-vl:2b-instruct) | 检测=开(yolo26n.pt) | 索引=120 条
+[+   0.1s] INFO    pipeline  [quality] 0.06s -> 1440x1304 blur=860.17 composite=False(corr=0.397) moire=1.523
+[+   0.1s] INFO    pipeline  [detect] YOLO 推理中（imgsz=1280 device=cpu，CPU 上约 20~60s）...
+[+  22.0s] INFO    pipeline  [detect] 21.93s -> status=ok 瓶=25 行=4
+[+  23.1s] INFO    vlm       [vlm] 请求 .../api/chat model=qwen3-vl:2b-instruct 图长边=1024 ...
+[+  45.5s] INFO    vlm       [vlm] 22.4s done_reason=stop eval_count=148 content_len=286 thinking_len=0
+[+  45.5s] INFO    vlm       [vlm.norm] behind='前排元气瓶正后方是其他品牌产品' -> 截取片段='是其他品牌产品' -> depth=no
+```
+
+| 级别 | 内容 |
+|---|---|
+| INFO | 阶段边界 + 该阶段决定了什么（命中/推导/封顶/耗时） |
+| DEBUG | 中间量：模型原始输出头部、YOLO 类别分布、每个框统计、解析后的原始 JSON |
+| WARNING | 降级与兜底：`degraded` 逐项、pHash 退化、权重加载失败、检出非零但类名过滤后为 0 |
+| ERROR | 本图必转人工的失败：VLM 空响应（含 done_reason/eval_count/thinking_len 指纹）、HTTP 非 200（含服务端错误体原文）、JSON 解析失败 |
+
+约定（[audit/logutil.py](audit/logutil.py) 顶部有详细说明）：
+
+- 库代码只 `get_logger(__name__)` 打日志，**不配置 handler**；handler 只由 `scripts/` 入口
+  调 `setup_logging()`。所以 `path_check.py` 这类不调 setup 的脚本默认是安静的（只留 WARNING 以上）。
+- 日志走 **stdout**，不走 stderr：PowerShell 会把 stderr 渲染成红色错误文本，正常进度看起来像报错。
+  只要结论时用 `--quiet`；要落文件自己 `*> log.txt`。
+- 长耗时环节（YOLO / VLM）**在开始之前**就先打一条，避免 20~80s 期间终端一片空白。
+- `--json-out` 的产物不变（机器可读结果），日志只给人看；两者不混：结论块仍用 print。
 
 ## 降级约定（重要）
 

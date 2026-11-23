@@ -9,6 +9,9 @@ import numpy as np
 from PIL import Image
 
 from . import imageops
+from .logutil import get_logger
+
+log = get_logger(__name__)
 
 
 class Embedder:
@@ -29,20 +32,24 @@ class Embedder:
         if want in ("auto", "torchvision"):
             if self._load_resnet():
                 self.backend, self.status = "resnet18", "ok"
+                log.info("[embed] 向量后端=resnet18（语义特征，512 维）")
                 return self.backend
 
         self.backend, self.status = "phash", "fallback"
+        log.warning("[embed] 向量后端退化为 pHash（仅感知哈希 64 维，跨图相似度区分度显著下降）")
         return self.backend
 
     def _load_resnet(self) -> bool:
         try:
             import torch
             from torchvision import models, transforms
-        except Exception:
+        except Exception as e:
+            log.debug("[embed] torch/torchvision 不可用：%s", e)
             return False
         try:
             m = getattr(models, self.cfg.get("torchvision_model", "resnet18"))(weights="DEFAULT")
-        except Exception:
+        except Exception as e:
+            log.debug("[embed] resnet18 权重不可用（多为无网下载失败）：%s", e)
             return False  # 没网下不了权重，退化为 phash
         m.eval()
         for p in m.parameters():

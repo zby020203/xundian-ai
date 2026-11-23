@@ -1,9 +1,11 @@
-"""单图端到端测试入口。
+"""单图端到端测试入口（带实时阶段日志）。
 
 用法：
     python scripts/run_single.py --image images/20251004/central/00987_cur.jpg
     python scripts/run_single.py --image <绝对路径> --no-vlm --no-detect
     python scripts/run_single.py --image ... --json-out outputs/one.json
+    python scripts/run_single.py --image ... --log-level debug   # 看模型原始输出/推导细节
+    python scripts/run_single.py --image ... --quiet             # 只要结论
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from audit.config import Config          # noqa: E402
+from audit.logutil import setup_logging   # noqa: E402
 from audit.pipeline import Pipeline      # noqa: E402
 
 
@@ -30,13 +33,19 @@ def main() -> int:
     ap.add_argument("--json-out", default=None)
     ap.add_argument("--full", action="store_true", help="打印完整 stage 详情")
     ap.add_argument("--strict", action="store_true", help="任何环节降级即报错退出，不允许静默降级")
-    ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--quiet", action="store_true", help="只留结论，屏蔽过程日志")
+    ap.add_argument("--log-level", default="info",
+                    choices=["debug", "info", "warning", "error", "quiet"],
+                    help="过程日志级别（debug 会打出模型原始输出、类别分布等中间量）")
     args = ap.parse_args()
 
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
     except Exception:
         pass
+
+    # 实时进度日志：每到一个阶段边界就立刻输出一行，不必等全部跑完。
+    setup_logging("quiet" if args.quiet else args.log_level)
 
     cfg = Config.load(args.config)
     pipe = Pipeline(cfg, use_vlm=not args.no_vlm, use_detector=not args.no_detect)

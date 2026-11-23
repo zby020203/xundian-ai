@@ -14,7 +14,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from audit.config import Config          # noqa: E402
+from audit.logutil import get_logger, setup_logging   # noqa: E402
 from audit.pipeline import Pipeline      # noqa: E402
+
+log = get_logger("smoke")
 
 SAMPLES = [
     "images/20251004/central/00987_cur.jpg",   # 纵深：洗衣液后排
@@ -28,31 +31,34 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-vlm", action="store_true")
     ap.add_argument("--no-detect", action="store_true")
+    ap.add_argument("--log-level", default="info",
+                    choices=["debug", "info", "warning", "error", "quiet"])
     args = ap.parse_args()
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
     except Exception:
         pass
+    setup_logging(args.log_level)
 
     cfg = Config.load()
     pipe = Pipeline(cfg, use_vlm=not args.no_vlm, use_detector=not args.no_detect)
 
     bad = 0
-    for s in SAMPLES:
+    for i, s in enumerate(SAMPLES, 1):
+        log.info("===== %d/%d %s =====", i, len(SAMPLES), s)
         res = pipe.run(s)
         if res.get("status") != "ok":
             bad += 1
-            print(f"[FAIL] {s}: {res.get('error')}")
+            log.error("[FAIL] %s: %s", s, res.get("error"))
             continue
         v, q = res["verdict"], res["stages"]["quality"]
         d = res["stages"]["detect"]
         deg = ",".join(res.get("degraded") or []) or "-"
-        print(f"[OK] {s.split('/')[-1]:>12}  -> {v['label_main']:<10} "
-              f"conf={v['confidence']:<5} route={v['route']:<5} "
-              f"瓶={d.get('n_bottles')} 行={d.get('rows')} "
-              f"composite={q['composite']}({q['composite_corr']}) | 降级: {deg}")
+        log.info("[OK] %s -> %s conf=%s route=%s 瓶=%s 行=%s composite=%s(%s) | 降级: %s",
+                 s.split("/")[-1], v["label_main"], v["confidence"], v["route"],
+                 d.get("n_bottles"), d.get("rows"), q["composite"], q["composite_corr"], deg)
 
-    print(f"\n{len(SAMPLES) - bad}/{len(SAMPLES)} 通过")
+    log.info("%d/%d 通过", len(SAMPLES) - bad, len(SAMPLES))
     return 0 if bad == 0 else 1
 
 
