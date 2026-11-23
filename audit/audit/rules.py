@@ -52,6 +52,25 @@ def _obs(vlm: Dict[str, object], key: str) -> str:
     return f"（观察：{s}）" if s else ""
 
 
+def _weak_display_context(vlm: Dict[str, object], det: Optional[Dict[str, object]]) -> bool:
+    """合法场景下，空瓶/纵深主张是否缺乏摆拍上下文佐证（缺则封顶转人工）。
+
+    判据语义随 detector.target 切换，这是换检测权重时必须跟着变的地方，
+    所以收在这一个函数里，两条规则都只调它、不各自写条件：
+    - target=bottle（COCO 通用瓶）：rows>1 是"任意瓶子多排"，正常货架的强信号，
+      此时 VLM 的空瓶/纵深主张无佐证 -> 封顶；rows<=1 可能是摆拍单排，不封顶。
+    - target=genki（微调元气专用）：rows 变成"元气多排"，而正常货架上元气常只占
+      顶层一排（实测 00021），沿用 rows>1 会让安全阀整体失效、误主张重新走 auto。
+      故去掉该条件，退化为"合法场景即封顶"。auto 放开的前置是微调 VLM，不是检测器。
+    """
+    if not vlm.get("scene_known") or vlm.get("scene_error"):
+        return False
+    d = det or {}
+    if str(d.get("target") or "bottle") == "genki":
+        return True
+    return d.get("status") == "ok" and int(d.get("rows", 0)) > 1
+
+
 def rule_empty_bottle(vlm: Dict[str, object], det: Optional[Dict[str, object]] = None) -> RuleHit:
     """空瓶：陈列面出现无液瓶即命中；孤立少量给低置信转人工。
 
@@ -76,10 +95,9 @@ def rule_empty_bottle(vlm: Dict[str, object], det: Optional[Dict[str, object]] =
         return True, EMPTY_LOW_CONF, f"见 {n} 支空瓶（孤立少量，低置信转人工复核）{_obs(vlm, 'empty_obs')}"
     conf = min(EMPTY_HIGH_CAP, EMPTY_HIGH_BASE + EMPTY_HIGH_STEP * n)
     ev = f"陈列面见 {n} 支无液空瓶，冒充陈列凑数{_obs(vlm, 'empty_obs')}"
-    if (det or {}).get("status") == "ok" and int((det or {}).get("rows", 0)) > 1 \
-            and vlm.get("scene_known") and not vlm.get("scene_error"):
+    if _weak_display_context(vlm, det):
         conf = min(conf, 0.55)
-        ev += "（合法场景多排陈列，空瓶主张无摆拍上下文佐证，低置信转人工）"
+        ev += "（合法场景陈列，空瓶主张无摆拍上下文佐证，低置信转人工）"
     return True, round(conf, 2), ev
 
 
@@ -147,10 +165,9 @@ def rule_depth(vlm: Dict[str, object], det: Optional[Dict[str, object]] = None) 
     if depth == "no":
         conf = float(vlm.get("confidence", 0.6) or 0.6) * 0.9
         ev = f"前排元气瓶后方无产品或只有其他品牌，纵深不足{_obs(vlm, 'behind')}"
-        if (det or {}).get("status") == "ok" and int((det or {}).get("rows", 0)) > 1 \
-                and vlm.get("scene_known") and not vlm.get("scene_error"):
+        if _weak_display_context(vlm, det):
             conf = min(conf, 0.55)
-            ev += "（合法场景多排陈列，behind 观察无佐证，低置信转人工）"
+            ev += "（合法场景陈列，behind 观察无佐证，低置信转人工）"
         return True, round(conf, 2), ev
     if depth == "unknown":
         return False, 0.0, "后排被遮挡，不可判（按规则丢弃）"
@@ -158,13 +175,27 @@ def rule_depth(vlm: Dict[str, object], det: Optional[Dict[str, object]] = None) 
 
 
 def rule_reuse(matches: List[dict], threshold: float, store_id: Optional[str]) -> RuleHit:
+    """跨图判重：只有"与另一门店的历史图高度相似"才定罪。
+
+    定罪与否只由本函数的 ok 表达，fusion 不再按规则名做二次剔除：
+    - 同店命中 -> ok=False（同一门店多拜访重复上传属正常业务），证据文本仍保留记录；
+    - 门店归属不明（未传 store_id，或索引元数据缺网点编码）-> 不敢断言"另一门店"，
+      命中但封顶到人工阈值以下，保留召回、拒绝自动定罪。
+    换判重方案时（多命中/时间窗/成对比对）只需改本函数与 matches 结构，
+    fusion 侧的标签映射不用动。
+    """
     if not matches:
         return False, 0.0, "未建索引或无命中"
     top = matches[0]
     sim = float(top.get("similarity", 0))
     if sim < threshold:
         return False, 0.0, f"最高相似度 {sim}，未达阈值 {threshold}"
-    same_store = store_id is not None and str(top.get("store_id")) == str(store_id)
-    if same_store:
-        return True, round(sim, 2), f"与同店历史图相似度 {sim}（同店比对本属正常，仅记录）"
-    return True, round(min(0.99, sim), 2), f"与另一门店（{top.get('store_id')}）历史图相似度 {sim}"
+    cur = str(store_id or "").strip()
+    matched = str(top.get("store_id") or "").strip()
+    if not cur or not matched:
+        return True, round(min(0.55, sim), 2), (
+            f"与历史图相似度 {sim}（门店归属不明：当前={cur or '未提供'} "
+            f"命中={matched or '缺失'}，无法排除同店，低置信转人工）")
+    if cur == matched:
+        return False, 0.0, f"与同店（{matched}）历史图相似度 {sim}，同店多拜访属正常，仅记录不定罪"
+    return True, round(min(0.99, sim), 2), f"与另一门店（{matched}）历史图相似度 {sim}"

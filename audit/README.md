@@ -41,10 +41,11 @@ audit/
 │   ├── config.py
 │   ├── logutil.py       # 统一日志（实时阶段进度，只打日志不配 handler）
 │   ├── imageops.py      # 清晰度 / 拼接检测 / 摩尔纹 / 感知哈希
-│   ├── detect.py        # YOLO 检测（瓶体）
+│   ├── detect.py        # YOLO 检测（瓶体），带 target 语义声明
 │   ├── embed.py         # 特征向量（ResNet / 退化 pHash）
 │   ├── retrieve.py      # numpy 1:N 检索
-│   ├── vlm.py           # Ollama qwen3-vl 调用
+│   ├── vlm.py           # Ollama qwen3-vl 调用 + 协议归一
+│   ├── compensate.py    # 针对 2B 的缺陷补偿层（可整层关闭）
 │   ├── rules.py         # 规则命中（单排 / 拼接 / 屏幕 / 场景 / 纵深 / 复用）
 │   ├── fusion.py        # 证据融合 + 是否转人工
 │   └── pipeline.py      # 编排
@@ -149,7 +150,7 @@ $py = "C:\Users\YQSL\miniconda3\envs\yolo\python.exe"
 [+  22.0s] INFO    pipeline  [detect] 21.93s -> status=ok 瓶=25 行=4
 [+  23.1s] INFO    vlm       [vlm] 请求 .../api/chat model=qwen3-vl:2b-instruct 图长边=1024 ...
 [+  45.5s] INFO    vlm       [vlm] 22.4s done_reason=stop eval_count=148 content_len=286 thinking_len=0
-[+  45.5s] INFO    vlm       [vlm.norm] behind='前排元气瓶正后方是其他品牌产品' -> 截取片段='是其他品牌产品' -> depth=no
+[+  45.5s] INFO    compensate [compensate] behind='前排元气瓶正后方是其他品牌产品' -> 截取片段='是其他品牌产品' -> depth=no
 ```
 
 | 级别 | 内容 |
@@ -168,6 +169,77 @@ $py = "C:\Users\YQSL\miniconda3\envs\yolo\python.exe"
 - 长耗时环节（YOLO / VLM）**在开始之前**就先打一条，避免 20~80s 期间终端一片空白。
 - `--json-out` 的产物不变（机器可读结果），日志只给人看；两者不混：结论块仍用 print。
 
+## 换模型操作口径（后期替换必读）
+
+模块依赖是星形的：只有 `pipeline.py` import 各环节，环节之间靠 dict 传值、互不 import，
+`rules.py` / `fusion.py` 是纯函数。所以**换实现不需要动其他模块**，但有三个开关必须跟着改，
+否则会出现"环节跑通了、口径却错了"的静默劣化（`degraded` 不会报警）。
+
+### 1. 换微调 YOLO 权重
+
+改 `config.json` 三项，**缺一不可**：
+
+```json
+"detector": {
+  "weights": "D:/models/genki_yolo.pt",
+  "target": "genki",
+  "bottle_class_names": ["genki"]
+}
+```
+
+- `target` 是语义声明（`bottle` = COCO 通用瓶，`genki` = 元气专用）。它决定安全阀怎么解释 `rows`：
+  - `bottle`：`rows>1`（任意瓶多排）才封顶转人工，单排可能是摆拍，不封顶；
+  - `genki`：**去掉 `rows>1` 条件**，合法场景即封顶。因为正常货架上元气常只占顶层一排
+    （实测 00021），沿用旧条件会让安全阀整体失效、空瓶误主张重新走 auto。
+  - 判据集中在 [rules._weak_display_context](audit/rules.py)，两条规则都只调它。
+- 加载期有两道体检会直接告警：权重类别与 `bottle_class_names` 无交集；`target=genki` 但类名仍是通用 `bottle`。
+- **auto 放开的前置是微调 VLM 到位，不是检测器升级。**
+
+### 2. 换微调 VLM
+
+```json
+"vlm": { "model": "genki-vl:7b", "compensations": [] }
+```
+
+`compensations` 控制 [audit/compensate.py](audit/compensate.py) 这一层：
+
+| 值 | 含义 |
+|---|---|
+| `["around_override", "behind_to_depth"]` | 当前 2B 的完整补偿（默认，等价于改造前行为） |
+| `[]` | 微调模型模式，直接采信模型结论字段 |
+| 只留一个 | 支持；未知名字告警后忽略，不会静默当成开启 |
+
+为什么必须关：这两条补丁的理由都是"2B 结论被『整齐=合格』锚定"。微调模型没这毛病后，
+补丁反而有害——模型正确报 `drink_shelf`、`around` 如实提到邻接洗涤区，覆写会把 scene 改成
+`other_shelf` 并把置信度压到 0.55，**把修好的模型拖回复核**。
+
+⚠️ **关掉 `behind_to_depth` 必须同步改 PROMPT**：当前 PROMPT 只让模型输出 `behind` 自由文本，
+没有 `depth` 字段。补偿一关，`depth` 走"模型自报枚举"分支，模型没报就恒为 `unknown` →
+纵深规则不判（不会误定罪，但召回会掉）。新模型要直接输出 `depth=yes/no/unknown`。
+
+场景白名单推导（`scene_error`）是业务共识，**不受开关影响**，永远生效。
+
+### 3. 改判重逻辑
+
+定罪范围只由 [rules.rule_reuse](audit/rules.py) 的 `ok` 表达，`fusion` 不再按规则名二次剔除：
+
+- 同店命中 → `ok=False`（同一门店多拜访重复上传属正常），证据文本仍入 `evidence` 保留记录；
+- 异店命中 → `ok=True` 定罪；
+- 门店归属不明（未传 `store_id`，或索引元数据缺网点编码）→ 命中但封顶 0.55 转人工，
+  不敢断言"另一门店"。跑单图时记得带 `--store-id`，否则判重只能转人工。
+
+改成多命中 / 时间窗 / cur+match 成对比对时，只需动 `rule_reuse` 与 `matches` 结构；
+换 embed 后端则必须重跑 `build_index.py`（向量维度变了 `vecs @ v` 会直接维度不匹配）。
+
+### 回归
+
+```powershell
+python scripts/path_check.py     # 49 项：26 项五类口径 + 23 项换模型契约
+```
+
+后 23 项锁的不是"当前模型判得准不准"，而是"换权重/换 VLM/换判重方案时口径不会静默漂移"：
+判重定罪范围 6 项、安全阀随 `target` 切换 8 项、补偿层开/关/部分开 9 项。
+
 ## 降级约定（重要）
 
 任何环节没真正跑起来，都会写在输出 JSON 的 `degraded` 数组里，例如：
@@ -175,6 +247,9 @@ $py = "C:\Users\YQSL\miniconda3\envs\yolo\python.exe"
 ```json
 "degraded": ["detect:unavailable", "vlm:disabled_by_flag", "retrieval:no_index"]
 ```
+
+检索报错也会入数组（`retrieval:error:...`）——换 embed 后端或索引维度不匹配时，
+跨图规则会静默失效，必须让它显式降级而不是看着像全跑通。
 
 `--strict` 模式下，只要 `degraded` 非空就返回退出码 2。
 **看到 `degraded: []` 才代表这条链路是真的全跑通了。**

@@ -39,9 +39,11 @@ def fuse(hits: Dict[str, tuple], vlm_ok: bool, cfg: Dict[str, object]) -> Dict[s
                 continue
             found[label] = max(found.get(label, 0.0), float(conf))
 
-    # 同店命中不算套拍，但要保留记录
-    if "reuse_other_store" in hits and not hits["reuse_other_store"][0]:
-        found.pop("套拍-同店多门店", None)
+    # 定罪范围已由规则层表达完毕，这里不再按规则名做二次剔除。
+    # 旧版曾在此处用 hits["reuse_other_store"][0] 为 False 去 pop 同店标签，
+    # 但 rule_reuse 同店命中时返回的是 True，该分支永远不触发（死代码），
+    # 导致同店重复上传被以高置信自动定罪。现同店/归属不明均由 rule_reuse 直接处理。
+    # 未命中规则的证据文本仍会在上方循环里入 evidence，所以"仅记录"不丢。
 
     labels = [k for k in priority if k in found]
     if not labels:

@@ -4,6 +4,12 @@
 
 覆盖：空瓶(多支/孤立)、纵深不足、场景错误、拍屏幕、拼接、正常、
 VLM 空响应/不可用转人工、纵深 unknown 不判、拍屏幕时陈列判定不适用。
+
+另锁三组"换模型不漂口径"契约（见文件下半）：
+    REUSE_CASES  判重定罪范围（同店/异店/归属不明）
+    VALVE_CASES  安全阀随 detector.target 切换的语义
+    COMP_CASES   VLM 缺陷补偿层开/关/部分开
+这三组测的不是"当前模型判得准不准"，而是"换权重/换 VLM/换判重方案时口径不会静默漂移"。
 """
 from __future__ import annotations
 
@@ -117,6 +123,117 @@ NORM_CASES = [
 ]
 
 
+# ---------------------------------------------------------------- 换模型契约用例
+
+# 判重定罪范围：(名称, matches, 当前 store_id, 期望 ok, 期望主标签, 期望路由, 置信度上限)
+REUSE_CASES = [
+    ("同店命中不定罪", [{"similarity": 0.95, "store_id": "WD001"}], "WD001",
+     False, "正常陈列", "auto", None),
+    ("异店命中定罪", [{"similarity": 0.95, "store_id": "WD002"}], "WD001",
+     True, "套拍-同店多门店", "auto", None),
+    ("未传store_id转人工", [{"similarity": 0.95, "store_id": "WD002"}], None,
+     True, "套拍-同店多门店", "human", 0.55),
+    ("索引缺网点编码转人工", [{"similarity": 0.95, "store_id": ""}], "WD001",
+     True, "套拍-同店多门店", "human", 0.55),
+    ("未达阈值不定罪", [{"similarity": 0.86, "store_id": "WD002"}], "WD001",
+     False, "正常陈列", "auto", None),
+    ("无命中不定罪", [], "WD001", False, "正常陈列", "auto", None),
+]
+
+# 安全阀语义：(名称, target, det.status, rows, vlm 覆写字段, 期望路由)
+VALVE_CASES = [
+    ("bottle单排空瓶auto", "bottle", "ok", 1, dict(empty_bottle_count=5), "auto"),
+    ("bottle多排空瓶human", "bottle", "ok", 3, dict(empty_bottle_count=5), "human"),
+    ("genki单排空瓶仍human", "genki", "ok", 1, dict(empty_bottle_count=5), "human"),
+    ("genki多排空瓶human", "genki", "ok", 3, dict(empty_bottle_count=5), "human"),
+    ("genki无检测仍human", "genki", "skipped", 0, dict(empty_bottle_count=5), "human"),
+    ("genki场景错误不封顶", "genki", "ok", 1,
+     dict(empty_bottle_count=5, scene="other_shelf", scene_error=True), "auto"),
+    ("bottle单排纵深auto", "bottle", "ok", 1, dict(depth="no"), "auto"),
+    ("genki单排纵深仍human", "genki", "ok", 1, dict(depth="no"), "human"),
+]
+
+# 补偿层开关：(名称, compensations, 模型原始输出, 期望字段子集, 置信度下限)
+COMP_CASES = [
+    ("补偿关-邻接洗涤不再误覆写", [],
+     {"scene": "drink_shelf", "around": "周围是洗衣液", "confidence": 0.9, "depth": "yes"},
+     {"scene": "drink_shelf", "scene_error": False, "depth": "yes"}, 0.9),
+    ("补偿关-采信模型depth", [], {"scene": "drink_shelf", "depth": "no"},
+     {"depth": "no"}, None),
+    ("补偿关-未报depth则unknown", [],
+     {"scene": "drink_shelf", "behind": "后方是其他品牌产品"},
+     {"depth": "unknown"}, None),
+    ("补偿关-非法depth归unknown", [], {"scene": "drink_shelf", "depth": "maybe"},
+     {"depth": "unknown"}, None),
+    ("补偿关-白名单口径仍生效", [], {"scene": "table"},
+     {"scene_error": True}, None),
+    ("只留behind推导", ["behind_to_depth"],
+     {"scene": "drink_shelf", "around": "周围是洗衣液",
+      "behind": "后方是其他品牌产品", "confidence": 0.9},
+     {"scene": "drink_shelf", "scene_error": False, "depth": "no"}, 0.9),
+    ("只留around覆写", ["around_override"],
+     {"scene": "drink_shelf", "around": "周围是洗衣液", "depth": "yes", "confidence": 0.9},
+     {"scene": "other_shelf", "scene_error": True, "depth": "yes"}, None),
+    ("未知补偿名忽略", ["no_such_patch"], {"scene": "drink_shelf", "depth": "no"},
+     {"depth": "no", "scene_error": False}, None),
+    ("全开-与改造前一致", None,
+     {"scene": "drink_shelf", "around": "周围是洗衣液",
+      "behind": "后方是其他品牌产品", "confidence": 0.9},
+     {"scene": "other_shelf", "scene_error": True, "depth": "no"}, None),
+]
+
+
+def check_reuse() -> int:
+    bad = 0
+    for name, matches, sid, want_ok, want_main, want_route, conf_max in REUSE_CASES:
+        hit = rules.rule_reuse(matches, 0.92, sid)
+        h = hits_of(vlm())
+        h["reuse_other_store"] = hit
+        out = fusion.fuse(h, True, CFG)
+        ok = (hit[0] == want_ok and out["label_main"] == want_main
+              and out["route"] == want_route)
+        if conf_max is not None:
+            ok = ok and out["confidence"] <= conf_max
+        bad += 0 if ok else 1
+        print(f"[{'PASS' if ok else 'FAIL'}] {name:22s} -> ok={hit[0]} "
+              f"main={out['label_main']} conf={out['confidence']} route={out['route']}")
+        if not ok:
+            print(f"       期望: ok={want_ok} main={want_main} route={want_route} conf<={conf_max}")
+    return bad
+
+
+def check_valve() -> int:
+    bad = 0
+    for name, target, status, rows, kw, want_route in VALVE_CASES:
+        det = dict(DET_OK, target=target, status=status, rows=rows)
+        v = vlm(**kw)
+        h = hits_of(v, det=det)
+        out = fusion.fuse(h, True, CFG)
+        ok = out["route"] == want_route
+        bad += 0 if ok else 1
+        print(f"[{'PASS' if ok else 'FAIL'}] {name:22s} -> target={target} rows={rows} "
+              f"conf={out['confidence']} route={out['route']}")
+        if not ok:
+            print(f"       期望: route={want_route}")
+    return bad
+
+
+def check_comp() -> int:
+    bad = 0
+    for name, comps, raw, want, conf_min in COMP_CASES:
+        out = OllamaVLM._normalize(dict(raw), comps)
+        ok = all(out.get(k) == v for k, v in want.items())
+        if conf_min is not None:
+            ok = ok and out.get("confidence", 0) >= conf_min
+        bad += 0 if ok else 1
+        print(f"[{'PASS' if ok else 'FAIL'}] {name:24s} -> scene={out.get('scene')} "
+              f"depth={out.get('depth')} scene_error={out.get('scene_error')} "
+              f"conf={out.get('confidence')}")
+        if not ok:
+            print(f"       期望: {want} conf>={conf_min}")
+    return bad
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -152,6 +269,16 @@ def main() -> int:
         if not ok:
             print(f"       期望: {want} conf<={conf_max}")
     total = len(CASES) + len(NORM_CASES)
+    print(f"\n{total - bad}/{total} 通过（五类口径 + 归一推导）")
+
+    print("\n---- 换模型契约：判重定罪范围 ----")
+    bad += check_reuse()
+    print("\n---- 换模型契约：安全阀随 detector.target ----")
+    bad += check_valve()
+    print("\n---- 换模型契约：VLM 缺陷补偿层开关 ----")
+    bad += check_comp()
+
+    total += len(REUSE_CASES) + len(VALVE_CASES) + len(COMP_CASES)
     print(f"\n{total - bad}/{total} 通过")
     return 0 if bad == 0 else 1
 

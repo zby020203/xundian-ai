@@ -13,6 +13,7 @@
   },
   "detector": {
     "weights": "yolo26n.pt",
+    "target": "bottle",
     "imgsz": 1280,
     "conf": 0.25,
     "bottle_class_names": ["bottle"],
@@ -36,7 +37,8 @@
     "num_predict": 1500,
     "num_ctx": 3072,
     "temperature": 0.1,
-    "image_max_side": 1024
+    "image_max_side": 1024,
+    "compensations": ["around_override", "behind_to_depth"]
   },
   "fusion": {
     "human_review_confidence": 0.6,

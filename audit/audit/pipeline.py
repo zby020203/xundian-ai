@@ -40,6 +40,10 @@ class Pipeline:
                  f"({self.cfg.get('detector.weights', '?')})" if use_detector else "",
                  self.index.size,
                  "" if self.index.size else "（未建，跨图规则不可用）")
+        # 换模型时最容易忘改的两个开关，开局就亮出来，不用等到看结果才发现口径不对。
+        log.info("模型语义开关：detector.target=%s | VLM 缺陷补偿=%s",
+                 self.detector.target,
+                 ", ".join(self.vlm.compensations) if self.vlm.compensations else "关（微调模型模式）")
 
     # ------------------------------------------------------------ 路径
 
@@ -74,18 +78,21 @@ class Pipeline:
                  " 模糊!" if q["blurry"] else "", q["composite"], q["composite_corr"], q["moire"],
                  " 尺寸偏小!" if q["too_small"] else "")
 
-        det = {"status": "skipped", "bottles": [], "n_bottles": 0, "rows": 0}
+        det = {"status": "skipped", "target": self.detector.target,
+               "bottles": [], "n_bottles": 0, "rows": 0}
         if self.use_detector:
             log.info("[detect] YOLO 推理中（imgsz=%s device=%s，CPU 上约 20~60s）...",
                      self.cfg.get("detector.imgsz", 1280), self.cfg.get("detector.device", "cpu"))
             t = time.time()
             det = self.detector.predict(path)
             timings["detect"] = round(time.time() - t, 3)
-            log.info("[detect] %.2fs -> status=%s 瓶=%s 行=%s%s",
-                     timings["detect"], det.get("status"), det.get("n_bottles"), det.get("rows"),
+            log.info("[detect] %.2fs -> status=%s target=%s 瓶=%s 行=%s%s",
+                     timings["detect"], det.get("status"), det.get("target"),
+                     det.get("n_bottles"), det.get("rows"),
                      "" if det.get("status") == "ok" else f"（{det.get('error', '')}）")
         else:
-            log.info("[detect] 跳过（--no-detect），单排/多排安全阀将不生效")
+            log.info("[detect] 跳过（--no-detect），无 CV 佐证（target=%s 语义仍参与安全阀）",
+                     self.detector.target)
         stages["detect"] = det
 
         t = time.time()
@@ -136,6 +143,9 @@ class Pipeline:
         stages["vlm"] = vlm_out
 
         # ---- 规则 ----
+        if matches and not store_id:
+            log.warning("[retrieval] 有命中但未提供 store_id，无法区分同店/异店，"
+                        "判重只能低置信转人工（用 --store-id 传入）")
         hits = {
             "composite": rules.rule_composite(stages["quality"],
                                               float(self.cfg.get("quality.composite_corr_threshold",
@@ -174,6 +184,10 @@ class Pipeline:
             degraded.append(f"vlm:{vlm_out.get('status')}")
         if self.index.size == 0:
             degraded.append("retrieval:no_index")
+        elif emb_status.startswith("error"):
+            # 检索报错也是"没真正跑起来"，必须入 degraded；
+            # 否则换 embed 后端/索引维度不匹配时，跨图规则静默失效而结论看着像全跑通。
+            degraded.append(f"retrieval:{emb_status}")
         if emb_status != "skipped" and self.embedder.backend == "phash":
             degraded.append("embed:phash_fallback")
 

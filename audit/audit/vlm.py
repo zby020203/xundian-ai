@@ -22,6 +22,7 @@ from typing import Dict
 import requests
 from PIL import Image
 
+from . import compensate
 from .logutil import get_logger
 
 log = get_logger(__name__)
@@ -71,6 +72,8 @@ class OllamaVLM:
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.status = "not_called"
+        # 缺陷补偿开关：缺省全开（当前 2B）；微调模型上线置 config.vlm.compensations=[]。
+        self.compensations = compensate.resolve(cfg.get("compensations"))
 
     def available(self) -> bool:
         try:
@@ -133,7 +136,7 @@ class OllamaVLM:
             return {"status": "empty_response",
                     "error": "模型输出为空（思考耗尽 token 预算），本图转人工",
                     "raw": ""}
-        parsed = self._normalize(self._parse(text))
+        parsed = self._normalize(self._parse(text), self.compensations)
         if parsed.get("parse_error"):
             self.status = "parse_error"
             parsed["status"] = "parse_error"
@@ -160,7 +163,12 @@ class OllamaVLM:
         return {"parse_error": True}
 
     @staticmethod
-    def _normalize(d: Dict[str, object]) -> Dict[str, object]:
+    def _normalize(d: Dict[str, object], compensations=None) -> Dict[str, object]:
+        """协议归一（换模型也要留）+ 可选缺陷补偿层（换微调模型要整层关）。
+
+        compensations=None 表示全开，保持 path_check 等直接调用的老语义；传 [] 即微调模型模式。
+        业务口径（场景白名单推导 scene_error）不受开关影响，永远生效。
+        """
         out = dict(d)
         scene_raw = str(out.get("scene", "unknown")).lower().strip()
         scene = _SCENE_ALIASES.get(scene_raw, scene_raw)
@@ -190,64 +198,17 @@ class OllamaVLM:
         log.info("[vlm.norm] scene=%s 属白名单=%s 拍屏=%s -> scene_error=%s",
                  scene, scene in SCENE_WHITELIST, out["is_screen"], out["scene_error"])
 
-        # around 交叉校验：观察出现强非饮料信号但 scene 报白名单时，按白名单规则覆写。
-        # 实测 2B 的 scene 结论会被“整齐=合格”锚定（洗涤货架报 drink_shelf、冰柜顶报 drink_freezer），
-        # 而其 around 观察反而正确。覆写置信度封顶 0.55 转人工，防邻接商品误伤。
-        around = str(out.get("around") or "")
-        override = None
-        if not out["is_screen"] and out["scene_known"] and scene in SCENE_WHITELIST and around:
-            if any(k in around for k in ("冰柜顶", "盖上", "餐桌", "桌面")):
-                override = "table"
-            elif "收银" in around:
-                override = "counter"
-            elif any(k in around for k in ("洗衣", "洗涤", "文具", "烟酒", "母婴", "餐具")):
-                override = "other_shelf"
-        # 注意：“零食”不做覆写信号——零食常邻接饮料陈列（实测正常割箱被误伤）。
-        if override:
-            log.info("[vlm.norm] around 观察出现非饮料信号，scene 由白名单覆写：%s -> %s｜around=%r",
-                     scene, override, around[:60])
-            out["scene_override_from"] = scene
-            out["scene"] = override
-            out["scene_error"] = True
-            try:
-                cur = float(out.get("confidence", 0.6))
-            except Exception:
-                cur = 0.6
-            out["confidence"] = min(cur, 0.55)
-            log.info("[vlm.norm] 置信度封顶：%s -> %s（低于 0.6 即转人工）", cur, out["confidence"])
+        # depth 协议归一：先按模型自报枚举兜底（换任何模型都要有这一步）；
+        # 补偿层开启时会被 behind 自由文本推导覆盖，关闭时直接采信模型结论。
+        raw_depth = str(out.get("depth") or "").strip().lower()
+        out["depth"] = raw_depth if raw_depth in ("yes", "no", "unknown") else "unknown"
 
-        # behind 自由文本观察 -> depth 确定性推导（共识：后方有元气即合格）。
-        # 不信任模型自报 depth/枚举：实测 2B 结论被“整齐=合格”锚定，自由文本观察反而正确。
-        # 截取“后方/背后/后面”之后的片段，避免“前排元气瓶”字样干扰；
-        # 遮挡优先判 unknown（宁可不判，不误判）；纸箱不算“无产品”（割箱陈列后方是元气自己的纸箱）。
-        behind = str(out.get("behind") or "")
-        seg = behind
-        for anchor in ("后方", "背后", "后面"):
-            i = behind.find(anchor)
-            if i >= 0:
-                seg = behind[i + len(anchor):]
-                break
-        low = behind.strip().lower()
-        if low in ("genki", "yes"):
-            depth = "yes"
-        elif low in ("other", "empty", "no"):
-            depth = "no"
-        elif low in ("occluded", "unknown"):
-            depth = "unknown"
-        elif "元气" in seg:
-            depth = "yes"
-        elif any(k in behind for k in ("看不清", "被挡", "遮挡")):
-            depth = "unknown"
-        elif out.get("scene") == "case_display" and any(k in behind for k in ("纸箱", "饮料箱", "包装袋")):
-            # 割箱陈列后方通常是元气自己的纸箱，品牌不可读 → 宁可不判。
-            depth = "unknown"
-        elif any(k in seg for k in ("其他品牌", "他牌", "空层板", "无产品")):
-            depth = "no"
-        else:
-            depth = "unknown"
-        out["depth"] = depth
-        log.info("[vlm.norm] behind=%r -> 截取片段=%r -> depth=%s",
-                 behind[:70], seg[:40], depth)
+        # 缺陷补偿（around 覆写 / behind->depth 推导）已抽到 compensate.py，可整层关闭。
+        # 换微调 VLM 时把 config.vlm.compensations 置为 []，这里就只剩协议归一与业务白名单。
+        names = compensate.resolve(compensations)
+        out = compensate.apply(out, names, SCENE_WHITELIST)
+        log.debug("[vlm.norm] depth=%s 来源=%s", out["depth"],
+                  "behind 推导" if "behind_to_depth" in names else "模型自报枚举")
 
         # 空瓶计数：缺省/非法一律 -1（不可判），兼容旧字段 has_empty_bottle。
         cnt = out.get("empty_bottle_count", None)
