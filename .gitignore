@@ -1,0 +1,85 @@
+# ===== 大文件 / 模型权重（可重新下载，不要进版本库）=====
+*.pt
+*.pth
+*.onnx
+*.engine
+*.safetensors
+*.gguf
+*.ckpt
+
+# Ollama 模型本地缓存（GB 级二进制）
+/Qwen-VL-2B/
+/manifests/
+/manifests-v2/
+/metadata/
+
+# ===== 原始素材与压缩包 =====
+/zips/
+/data/images/
+
+# ===== 第三方源码（不是本项目代码，建议改用 git submodule）=====
+/ultralytics-main/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+_build/
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ===== 虚拟环境 =====
+.venv/
+venv/
+env/
+ENV/
+
+# ===== 测试 / 覆盖率 / lint 缓存 =====
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# ===== 临时缓存目录 =====
+.cache/
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+
+# ===== 密钥与本地配置（绝不上传）=====
+.env
+.env.*
+*.key
+*.pem
+secrets/
+credentials.json
+*_local.json
+*.local
+
+# ===== 个人信息 / 隐私数据（不上传）=====
+data/人员信息.csv
+
+# ===== 数据库 / 派生索引（由脚本重新生成）=====
+*.db
+*.sqlite
+*.sqlite3
+audit/outputs/image_index.npz
+audit/outputs/image_index.npz.meta.json
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ===== 编辑器 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

@@ -1,0 +1,98 @@
+{
+  "status": "ok",
+  "image": "images/20251016/southwest/15164_cur.jpg",
+  "image_path": "D:\\Users\\Desktop\\巡店AI\\data\\images/20251016/southwest/15164_cur.jpg",
+  "image_id": "1ca6bd9da4697ef7",
+  "store_id": null,
+  "visit_id": null,
+  "verdict": {
+    "label_main": "套拍-相似图",
+    "label_all": [
+      "套拍-相似图"
+    ],
+    "confidence": 0.95,
+    "route": "auto",
+    "evidence": [
+      "[composite] 左右半幅相关 0.6269，未达拼接阈值 0.85",
+      "[single_row] 仅检出 0 个瓶体，不足以判断排面",
+      "[screen] VLM 判定为拍屏幕/翻拍",
+      "[empty_bottle] 拍屏幕照片，空瓶判定不适用",
+      "[scene_error] 拍屏幕照片，场景判定不适用",
+      "[depth] 拍屏幕照片，纵深判定不适用",
+      "[reuse_other_store] 最高相似度 0.7504，未达阈值 0.92"
+    ],
+    "reason": "VLM 判定为拍屏幕/翻拍"
+  },
+  "degraded": [],
+  "stages": {
+    "quality": {
+      "width": 1200,
+      "height": 1825,
+      "blur": 1214.4,
+      "blurry": false,
+      "composite": false,
+      "composite_corr": 0.6269,
+      "moire": 1.45,
+      "too_small": false
+    },
+    "detect": {
+      "status": "ok",
+      "bottles": [],
+      "n_bottles": 0,
+      "rows": 0
+    },
+    "retrieval": {
+      "status": "ok(resnet18)",
+      "index_size": 120,
+      "matches": [
+        {
+          "image_path": "images/20251002/southwest/00098_cur.jpg",
+          "store_id": "YQWD03291822",
+          "store_name": "钟钟便利店",
+          "visit_id": "251002182554219",
+          "date": "2025-10-02",
+          "similarity": 0.7504
+        },
+        {
+          "image_path": "images/20251002/southwest/00108_cur.jpg",
+          "store_id": "YQWD03291822",
+          "store_name": "钟钟便利店",
+          "visit_id": "251002182554219",
+          "date": "2025-10-02",
+          "similarity": 0.7504
+        },
+        {
+          "image_path": "images/20251002/southwest/00089_cur.jpg",
+          "store_id": "YQWD03291822",
+          "store_name": "钟钟便利店",
+          "visit_id": "251002182554219",
+          "date": "2025-10-02",
+          "similarity": 0.7504
+        }
+      ]
+    },
+    "vlm": {
+      "around": "陈列面周围是饮料货架，有其他品牌产品，但没有看到零食、文具、洗涤、烟酒、母婴、餐具等。",
+      "behind": "前排元气瓶正后方是其他品牌产品，但没有看到空层板或被挡看不清。",
+      "empty_obs": "陈列面有无液体的透明空瓶，有3支，其中2支是空瓶，1支是装有液体的瓶子。",
+      "scene": "drink_shelf",
+      "is_screen": true,
+      "empty_bottle_count": 3,
+      "single_row": true,
+      "confidence": 0.95,
+      "reason": "陈列面为饮料货架，元气产品整齐排列，符合单排等距正对镜头的摆拍要求，空瓶数为3，液面清晰可见，符合空瓶判据。",
+      "scene_known": true,
+      "scene_error": false,
+      "depth": "unknown",
+      "status": "ok",
+      "raw": "{\n  \"around\": \"陈列面周围是饮料货架，有其他品牌产品，但没有看到零食、文具、洗涤、烟酒、母婴、餐具等。\",\n  \"behind\": \"前排元气瓶正后方是其他品牌产品，但没有看到空层板或被挡看不清。\",\n  \"empty_obs\": \"陈列面有无液体的透明空瓶，有3支，其中2支是空瓶，1支是装有液体的瓶子。\",\n  \"scene\": \"drink_shelf\",\n  \"is_screen\": true,\n  \"empty_bottle_count\": 3,\n  \"single_row\": true,\n  \"confidence\": 0.95,\n  \"reason\": \"陈列面为饮料"
+    }
+  },
+  "timings": {
+    "quality": 0.138,
+    "detect": 14.388,
+    "retrieval": 0.671,
+    "vlm": 21.757,
+    "total": 36.954
+  }
+}

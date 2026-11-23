@@ -1,0 +1,45 @@
+{
+  "paths": {
+    "dataset_root": "D:/Users/Desktop/巡店AI/data",
+    "model_root": "D:/Users/Desktop/巡店AI",
+    "output_dir": "D:/Users/Desktop/巡店AI/audit/outputs",
+    "index_path": "D:/Users/Desktop/巡店AI/audit/outputs/image_index.npz"
+  },
+  "quality": {
+    "min_side": 480,
+    "blur_threshold": 60.0,
+    "composite_corr_threshold": 0.85,
+    "watermark_top_ratio": 0.15
+  },
+  "detector": {
+    "weights": "yolo26n.pt",
+    "imgsz": 1280,
+    "conf": 0.25,
+    "bottle_class_names": ["bottle"],
+    "device": "cpu"
+  },
+  "embedder": {
+    "backend": "auto",
+    "fallback": "phash",
+    "torchvision_model": "resnet18"
+  },
+  "retrieval": {
+    "top_k": 5,
+    "reuse_similarity": 0.92,
+    "phash_similarity": 0.88
+  },
+  "vlm": {
+    "backend": "ollama",
+    "host": "http://127.0.0.1:11434",
+    "model": "qwen3-vl:2b-instruct",
+    "timeout": 300,
+    "num_predict": 1500,
+    "num_ctx": 3072,
+    "temperature": 0.1,
+    "image_max_side": 1024
+  },
+  "fusion": {
+    "human_review_confidence": 0.6,
+    "label_priority": ["套拍-相似图", "套拍-同店多门店", "空瓶", "场景错误", "纵深不足", "正常陈列"]
+  }
+}

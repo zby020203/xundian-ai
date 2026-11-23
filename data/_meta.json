@@ -1,0 +1,84 @@
+[
+ {
+  "name": "摆拍货架",
+  "rows": 1132,
+  "cols": 21,
+  "imgcols": [
+   "照片url",
+   "匹配照片url"
+  ],
+  "imgrows": 2264,
+  "file": "csv_out/摆拍货架.csv"
+ },
+ {
+  "name": "摆拍冰柜",
+  "rows": 306,
+  "cols": 21,
+  "imgcols": [
+   "照片url",
+   "匹配照片url"
+  ],
+  "imgrows": 612,
+  "file": "csv_out/摆拍冰柜.csv"
+ },
+ {
+  "name": "摆拍空瓶",
+  "rows": 168,
+  "cols": 19,
+  "imgcols": [
+   "照片url",
+   "匹配照片url"
+  ],
+  "imgrows": 336,
+  "file": "csv_out/摆拍空瓶.csv"
+ },
+ {
+  "name": "摆拍其他",
+  "rows": 228,
+  "cols": 19,
+  "imgcols": [
+   "照片url",
+   "匹配照片url"
+  ],
+  "imgrows": 456,
+  "file": "csv_out/摆拍其他.csv"
+ },
+ {
+  "name": "套拍",
+  "rows": 259,
+  "cols": 19,
+  "imgcols": [
+   "照片url",
+   "匹配照片url"
+  ],
+  "imgrows": 518,
+  "file": "csv_out/套拍.csv"
+ },
+ {
+  "name": "正常巡店",
+  "rows": 198,
+  "cols": 13,
+  "imgcols": [
+   "照片url",
+   "匹配照片url"
+  ],
+  "imgrows": 396,
+  "file": "csv_out/正常巡店.csv"
+ },
+ {
+  "name": "Sheet3",
+  "rows": 10,
+  "cols": 4,
+  "imgcols": [
+   "附件"
+  ],
+  "imgrows": 0,
+  "file": "csv_out/Sheet3.csv"
+ },
+ {
+  "name": "人员信息",
+  "rows": 6897,
+  "cols": 20,
+  "file": "csv_out/人员信息.csv"
+ }
+]

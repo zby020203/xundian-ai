@@ -1,0 +1,10 @@
+# 运行时用 conda 的 yolo 环境，这里只记录版本要求
+# C:\Users\YQSL\miniconda3\envs\yolo\python.exe
+torch>=2.0
+torchvision>=0.15
+ultralytics>=8.4
+numpy>=1.24
+pillow>=10.0
+requests>=2.31
+pandas>=2.0
+opencv-python  # 可选，缺失时用 numpy 退化实现
