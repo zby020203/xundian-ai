@@ -1,0 +1,83 @@
+{
+  "step1_build_master": {
+    "sheet_rows": 35660,
+    "empty_path_rows": 0,
+    "unique_cur_images": 35660,
+    "candidate_distribution": {
+      "cand_empty_bottle": 1183,
+      "cand_depth": 14150,
+      "cand_scene": 2825,
+      "cand_screen": 882
+    },
+    "blackbox": 5693,
+    "negative_untrusted": 12762,
+    "dup_flag": 7459,
+    "seed_merged": 43,
+    "seed_missing": 0
+  },
+  "step2_retrieval_pairs": {
+    "pairs_total": 35660,
+    "positive": 7459,
+    "negative": 28201,
+    "rows_without_match": 0,
+    "cross_store_pairs": 35660,
+    "manifest_images": 71320
+  },
+  "step3_quality_metrics": {
+    "images": 35660,
+    "quality_distribution": {
+      "ok": 35627,
+      "blurry": 33
+    },
+    "watermark_band_detected": 35658
+  },
+  "step3_reflag": {
+    "reflag_distribution": {
+      "ok": 35627,
+      "blurry": 33
+    },
+    "blur_threshold": 500.0
+  },
+  "step4_sample_worklist": {
+    "worklist_total": 8165,
+    "pools": {
+      "empty_bottle": {
+        "eligible": 1183,
+        "picked": 1183,
+        "excluded_quality": 0
+      },
+      "screen": {
+        "eligible": 882,
+        "picked": 882,
+        "excluded_quality": 0
+      },
+      "scene": {
+        "eligible": 2823,
+        "picked": 800,
+        "excluded_quality": 0
+      },
+      "depth": {
+        "eligible": 14036,
+        "picked": 3000,
+        "excluded_quality": 14
+      },
+      "blackbox": {
+        "eligible": 3974,
+        "picked": 500,
+        "excluded_quality": 13
+      },
+      "negative": {
+        "eligible": 12729,
+        "picked": 1800,
+        "excluded_quality": 6
+      }
+    },
+    "images_without_pool": 0,
+    "seed": 42
+  },
+  "step3_canonical_materialize": {
+    "materialized": 8165,
+    "skipped": 0,
+    "preprocess_version": "crop_v2"
+  }
+}

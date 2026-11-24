@@ -17,6 +17,13 @@
 /zips/
 /data/images/
 
+# ===== Data_Cleaning 产物（代码与表进库，图副本与日志不进）=====
+# 截水印干净图副本 3.87GB，step3 --materialize 可再生，性质同 data/images/
+/Data_Cleaning/canonical/
+# 运行日志（瞬态噪声）
+/Data_Cleaning/outputs/*.log
+/Data_Cleaning/outputs/*.err
+
 # ===== 第三方源码（不是本项目代码，建议改用 git submodule）=====
 /ultralytics-main/
 

@@ -1,0 +1,44 @@
+{
+  "seed": 42,
+  "preprocess_version": "crop_v2",
+  "mapping": {
+    "form_to_candidate": {
+      "空瓶": "empty_bottle",
+      "货架摆拍": "depth",
+      "冰柜摆拍": "depth",
+      "柜台摆拍": "scene",
+      "翻拍": "screen"
+    },
+    "scene_positions": ["收银台", "餐区"],
+    "blackbox_forms": ["其他"],
+    "negative_forms": ["无"]
+  },
+  "label_tokens": {
+    "空瓶": "empty_bottle",
+    "纵深不足": "depth",
+    "场景错误": "scene",
+    "套拍-相似图": "screen"
+  },
+  "quality": {
+    "min_side": 480,
+    "blur_threshold": 500.0,
+    "watermark": {
+      "spread_threshold": 30.0,
+      "mean_max": 110.0,
+      "base_tol": 2,
+      "frac_threshold": 0.15,
+      "max_scan_ratio": 0.35,
+      "min_band_ratio": 0.02,
+      "stable_rows": 5
+    }
+  },
+  "quotas": {
+    "empty_bottle": -1,
+    "screen": -1,
+    "scene": 800,
+    "depth": 3000,
+    "blackbox": 500,
+    "negative": 1800
+  },
+  "jpeg_quality": 92
+}
