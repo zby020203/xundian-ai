@@ -7,11 +7,12 @@
   孤立 1~2 支给低置信（低于人工阈值自动转人工），>=3 支给高置信。
 - 纵深不足：前排元气瓶后方无产品或只有他牌 -> 命中；后方有元气即合格（不限排数）。
 - 场景错误：白名单制，合法位仅 饮料货架/饮料冰柜/割箱堆箱/端架（白名单推导在 vlm._normalize）。
-- 套拍-相似图：拍屏幕/翻拍（VLM is_screen）与拼接双图（左右半幅相关）。
+- 套拍-相似图：拍屏幕/翻拍（VLM is_screen）。拼接检测仅记录不定罪（导师五类口径无拼接）。
 - 套拍-同店多门店：跨记录检索，本阶段保留骨架不增强。
 
 阈值校准记录（10 张真实样本，scripts/_calibrate.py）：
-- composite_corr：正常图最高 0.627，真拼接图 0.952/0.959 -> 阈值 0.85（旧 0.6 会误报正常割箱）。
+- composite_corr：正常图最高 0.627，真拼接图 0.952/0.959 -> 阈值 0.85（旧 0.6 会误报正常割箱）；
+  现仅作证据记录、不参与定罪（导师五类口径无拼接）。
 - moire：128px 下拍屏幕 1.40~1.55 与正常图 1.41~1.49 完全重叠，无区分度，
   只记录在 quality 阶段作证据，不参与定罪（旧 moire_threshold=0.35 为恒命中隐患，已移除）。
 """
@@ -31,7 +32,7 @@ EMPTY_HIGH_BASE = 0.65
 EMPTY_HIGH_STEP = 0.05
 EMPTY_HIGH_CAP = 0.90
 
-# 拼接双图阈值（校准见模块 docstring）。
+# 拼接检测阈值（仅记录用，校准见模块 docstring）。
 COMPOSITE_CORR_THRESHOLD = 0.85
 
 
@@ -124,7 +125,7 @@ def rule_single_row(det: Dict[str, object]) -> RuleHit:
 def rule_composite(quality: Dict[str, object], threshold: float = COMPOSITE_CORR_THRESHOLD) -> RuleHit:
     corr = float(quality.get("composite_corr", 0) or 0)
     if quality.get("composite"):
-        return True, round(min(0.99, 0.6 + corr * 0.4), 2), f"左右半幅相关 {corr}，判定为拼接双图"
+        return True, round(min(0.99, 0.6 + corr * 0.4), 2), f"左右半幅相关 {corr}，达拼接阈值（仅记录，不定罪）"
     return False, 0.0, f"左右半幅相关 {corr}，未达拼接阈值 {threshold}"
 
 

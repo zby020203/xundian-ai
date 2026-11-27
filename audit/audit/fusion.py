@@ -6,13 +6,14 @@
 场景错误（白名单违例）次之；纵深不足最轻排最后。与 labels.csv 人工习惯一致
 （空瓶+场景错误共现时主标签取空瓶）。
 single_row 只作摆拍形态证据，不定罪（新口径空瓶看有无液体）。
+composite（拼接双图）同款仅证据不定罪：导师五类口径无拼接，
+检测值只入 evidence 供人工识别重复录入/拼图提交，不产生标签。
 """
 from __future__ import annotations
 
 from typing import Dict, List
 
 RULE_TO_LABEL = {
-    "composite": "套拍-相似图",
     "screen": "套拍-相似图",
     "reuse_other_store": "套拍-同店多门店",
     "empty_bottle": "空瓶",

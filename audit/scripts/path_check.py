@@ -2,7 +2,7 @@
 
     python scripts/path_check.py
 
-覆盖：空瓶(多支/孤立)、纵深不足、场景错误、拍屏幕、拼接、正常、
+覆盖：空瓶(多支/孤立)、纵深不足、场景错误、拍屏幕、拼接仅记录、正常、
 VLM 空响应/不可用转人工、纵深 unknown 不判、拍屏幕时陈列判定不适用。
 
 另锁四组"换模型/换后端不漂口径"契约（见文件下半）：
@@ -69,14 +69,14 @@ CASES = [
     ("拍屏幕", vlm(is_screen=True, scene="screen", scene_known=True, scene_error=False,
                depth="no", empty_bottle_count=4), CLEAN_QUALITY,
      "套拍-相似图", "auto", {"套拍-相似图"}),
-    ("拼接双图", vlm(), {"composite": True, "composite_corr": 0.95, "moire": 1.5},
-     "套拍-相似图", "auto", {"套拍-相似图"}),
+    ("拼接仅记录不定罪", vlm(), {"composite": True, "composite_corr": 0.95, "moire": 1.5},
+     "正常陈列", "auto", set()),
     ("正常陈列", vlm(), CLEAN_QUALITY, "正常陈列", "auto", set()),
     ("VLM空响应转人工", {"status": "empty_response"}, CLEAN_QUALITY,
      "正常陈列", "human", set()),
-    ("VLM不可用+拼接仍转人工", {"status": "unavailable"},
+    ("VLM不可用+拼接不定罪仍转人工", {"status": "unavailable"},
      {"composite": True, "composite_corr": 0.95, "moire": 1.5},
-     "套拍-相似图", "human", {"套拍-相似图"}),
+     "正常陈列", "human", set()),
     ("空瓶计数自矛盾转人工", vlm(empty_bottle_count=5,
                           empty_obs="透明瓶均有液体，无空瓶"), CLEAN_QUALITY,
      "空瓶", "human", {"空瓶"}),
