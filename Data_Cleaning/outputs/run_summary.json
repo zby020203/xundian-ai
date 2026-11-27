@@ -79,5 +79,9 @@
     "materialized": 8165,
     "skipped": 0,
     "preprocess_version": "crop_v2"
+  },
+  "seed_provenance_correction": {
+    "downgraded_to_seed_draft": 43,
+    "reason": "agent初标未经人工逐条签认，不得称真值"
   }
 }

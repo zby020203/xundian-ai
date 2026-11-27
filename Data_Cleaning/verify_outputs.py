@@ -46,9 +46,10 @@ def main() -> None:
     sd = collections.Counter(w["stratum"] for w in work)
     print(f"worklist quality: {dict(qd)}")
     print(f"worklist stratum: {dict(sd)}")
-    seeds = [r for r in rows if r["label_source"] == "human_verified"]
+    seeds = [r for r in rows if r["label_source"] == "seed_draft"]
     seeds_in = sum(1 for r in seeds if r["in_worklist"] == "1")
-    print(f"种子 human_verified={len(seeds)} 其中进工作清单={seeds_in}")
+    n_human = sum(1 for r in rows if r["label_source"] == "human_verified")
+    print(f"种子草稿 seed_draft={len(seeds)} 其中进工作清单={seeds_in}；已签认真值 human_verified={n_human}")
 
     # 3) 抽检裁剪几何：首/中/尾各 1 张 + 1 张 crop=0
     by_path = {r["image_path"]: r for r in rows}

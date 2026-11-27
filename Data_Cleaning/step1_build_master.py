@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """步骤①：建主表骨架——把业务表翻译成五类候选表。
 
-输入：data/Sheet1.csv（只读）+ config.json 映射配置 + audit/labels.csv 人工种子。
+输入：data/Sheet1.csv（只读）+ config.json 映射配置 + audit/labels.csv 种子草稿。
 输出：outputs/master_labels.csv（一行一张 cur 图，全量弱标签层）。
 
 口径（grill 共识）：
@@ -9,7 +9,8 @@
 - 同一 image_path 在多行出现时聚合为一行：候选取并集，n_source_rows 计数；
 - 是否重复=是 只置 dup_flag（检索线信号），永不进单图标签；
 - 摆拍形式=无 置 negative_untrusted（不可信负样本，待复核）；
-- 43 条人工细标按 image_path 并入，label_source=human_verified，是全表唯一定稿真值。
+- 43 条种子按 image_path 并入，label_source=seed_draft：早期会话 agent 看图初标、
+  未经人工逐条签认，只是口径锚点/回归对照草稿，**不是真值**；真值一律等步骤⑤⑦。
 
 运行：python step1_build_master.py
 """
@@ -90,7 +91,7 @@ def main() -> None:
         if form not in negative_forms:
             r["negative_untrusted"] = 0
 
-    # ---- 并入人工种子真值（audit/labels.csv，43 条）----
+    # ---- 并入种子草稿（audit/labels.csv，43 条；agent 初标未签认，非真值）----
     tokens = cfg["label_tokens"]
     seeds = C.read_csv(C.AUDIT / "labels.csv")
     n_seed_merged = 0
@@ -109,8 +110,8 @@ def main() -> None:
         for col in C.LABEL_COLS:
             r[col] = 1 if col.replace("label_", "") in hit else 0
         r["label_all"] = label_all
-        r["label_source"] = "human_verified"
-        r["annotator"] = "human_seed_v1"
+        r["label_source"] = "seed_draft"
+        r["annotator"] = "agent_draft_v1"
         r["seed_sample_type"] = (s.get("sample_type") or "").strip()
         r["seed_reason"] = (s.get("reason_cn") or "").strip()
         n_seed_merged += 1
